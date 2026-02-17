@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission: Birthday Protocol</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lato:wght@300;400;700&family=Dancing+Script:wght@400;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        serif: ['"Playfair Display"', 'serif'],
+                        sans: ['"Lato"', 'sans-serif'],
+                        handwriting: ['"Dancing Script"', 'cursive'],
+                    },
+                    colors: {
+                        'cream': '#F9F7F2',
+                        'charcoal': '#2C2C2C',
+                        'gold': '#D4AF37',
+                        'soft-gold': '#F3E5AB',
+                        'rose': '#E6BEAE',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 1s ease-out forwards',
+                        'slide-up': 'slideUp 0.8s ease-out forwards',
+                        'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both',
+                        'float': 'float 6s ease-in-out infinite',
+                        'scribble': 'scribble 2.5s ease-in-out forwards',
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { transform: 'translateY(20px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
+                        shake: {
+                            '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                            '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                            '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                            '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #F9F7F2;
+            color: #2C2C2C;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .stage {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .active-stage {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* 3D Card Flip */
+        .card-perspective {
+            perspective: 1000px;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+
+        .flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front,
+        .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-front {
+            background-color: #2C2C2C;
+            color: #D4AF37;
+        }
+
+        .card-back {
+            background-color: #fff;
+            transform: rotateY(180deg);
+            border: 2px solid #D4AF37;
+        }
+
+        /* Paper texture effect */
+        .paper-texture {
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
+        }
+    </style>
+</head>
+
+<body class="font-sans min-h-screen flex flex-col overflow-x-hidden relative selection:bg-gold selection:text-white">
+
+    <!-- Progress Bar -->
+    <div class="fixed top-0 left-0 w-full h-1 bg-gray-200 z-50">
+        <div id="progress-bar" class="h-full bg-gold w-0 transition-all duration-1000 ease-out"></div>
+    </div>
+
+    <!-- Toast Component -->
+    <div id="toast-container"
+        class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[70] flex flex-col items-center gap-2 pointer-events-none w-full max-w-sm px-4">
+    </div>
+
+    <!-- Stage 1: Login -->
+    <div id="stage-1" class="stage active-stage flex-col items-center justify-center h-screen p-6 w-full">
+        <div class="max-w-md w-full text-center space-y-8 animate-slide-up">
+            <h1 class="font-serif text-5xl italic text-charcoal mb-2">Here We Go..</h1>
+            <p class="text-gray-500 font-light tracking-wide uppercase text-sm">Guess the passcode</p>
+
+            <div class="relative group">
+                <input type="password" id="password-input" placeholder="Hint : Don't use Brain"
+                    class="w-full bg-transparent border-b-2 border-gray-300 py-3 text-center text-xl tracking-widest focus:outline-none focus:border-gold transition-colors font-serif placeholder-gray-300"
+                    onkeypress="handleEnter(event)">
+            </div>
+
+            <button onclick="attemptLogin()"
+                class="mt-8 px-8 py-3 bg-charcoal text-white font-serif tracking-wider hover:bg-gold transition-colors duration-300 rounded-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0">
+                UNLOCK
+            </button>
+            <p class="text-xs text-gray-300 mt-4 opacity-50">Let's see if you've got what it takes</p>
+        </div>
+    </div>
+
+    <!-- Stage 2: Quiz -->
+    <div id="stage-2" class="stage flex-col items-center justify-center min-h-screen p-6 w-full text-center">
+        <div class="max-w-xl w-full animate-slide-up my-auto">
+            <h2 class="font-serif text-3xl mb-8 text-charcoal">A Question of Character</h2>
+            <div id="quiz-card"
+                class="bg-white p-6 md:p-10 rounded-sm shadow-2xl border border-gray-100 relative overflow-hidden transition-all duration-500">
+                <!-- Decorative element -->
+                <div
+                    class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-gold to-transparent opacity-50">
+                </div>
+
+                <h3 id="question-text"
+                    class="text-xl md:text-2xl font-medium mb-10 text-gray-800 leading-relaxed min-h-[4rem] flex items-center justify-center">
+                    ?</h3>
+                <div id="answers-grid" class="flex flex-col gap-4"></div>
+            </div>
+            <p id="quiz-progress" class="mt-6 text-gray-400 text-xs tracking-widest uppercase">Question 1 of 3</p>
+        </div>
+    </div>
+
+    <!-- Stage 3: Memory -->
+    <div id="stage-3" class="stage flex-col items-center justify-center min-h-screen p-4 w-full">
+        <div class="text-center mb-6 animate-fade-in">
+            <h2 class="font-serif text-3xl mb-2">The Gallery</h2>
+            <p class="text-gray-500 font-light text-sm">Find the matching memories</p>
+        </div>
+
+        <div id="game-board" class="grid grid-cols-4 gap-2 md:gap-4 w-full max-w-lg mx-auto perspective-1000"></div>
+
+        <!-- Victory Message overlay -->
+        <div id="memory-victory"
+            class="hidden absolute inset-0 bg-cream/95 flex items-center justify-center z-10 animate-fade-in backdrop-blur-sm">
+            <div class="text-center">
+                <h3 class="font-serif text-4xl text-gold mb-4">Masterpiece Complete.</h3>
+                <p class="text-charcoal font-sans text-sm tracking-widest uppercase">Proceeding...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stage 4: Legal Declaration -->
+    <div id="stage-4"
+        class="stage flex-col items-center justify-center min-h-screen p-2 w-full bg-gray-100/50 overflow-y-auto">
+        <!-- Scale container for mobile handling -->
+        <div class="w-full flex justify-center py-8">
+            <!-- A4 Paper Container -->
+            <div
+                class="max-w-[210mm] w-full bg-white shadow-2xl p-6 md:p-12 relative min-h-[500px] md:min-h-[297mm] flex flex-col justify-between animate-slide-up paper-texture text-charcoal mx-4">
+
+                <!-- Header -->
+                <div class="text-center border-b-2 border-charcoal/10 pb-6 mb-6">
+                    <div class="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 opacity-80">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"
+                            class="w-full h-full text-gold">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 7v10M8 12h8" stroke-linecap="round" />
+                            <circle cx="12" cy="12" r="6" stroke-dasharray="2 2" />
+                        </svg>
+                    </div>
+                    <h1 class="font-serif text-2xl md:text-4xl font-bold tracking-widest uppercase mb-2">Deed of
+                        Adoption</h1>
+                    <p class="font-sans text-[10px] tracking-[0.3em] uppercase text-gray-400">Official Binding Agreement
+                        • Est. 2026</p>
+                </div>
+
+                <!-- Body -->
+                <div class="font-serif leading-relaxed text-sm md:text-lg space-y-6 flex-grow text-justify">
+                    <p>
+                        <span class="font-bold text-2xl float-left mr-2">T</span>HIS AGREEMENT is made and entered into
+                        on this day, celebrating the 18th year of the Undersigned.
+                    </p>
+
+                    <p>
+                        <span class="italic font-bold">WHEREAS</span>, the Undersigned (hereinafter referred to as <span
+                            class="font-bold border-b border-charcoal">'Minni'</span>) has verbally agreed to the terms
+                        of companionship;
+                    </p>
+
+                    <p>
+                        AND <span class="italic font-bold">WHEREAS</span>, the parties wish to formalize said verbal
+                        cues into a binding commitment of care, tolerance, and unlimited attention;
+                    </p>
+
+                    <p>
+                        <span class="italic font-bold">NOW THEREFORE</span>, let it be known that by attaching their
+                        signature below, the Undersigned hereby formally <span class="font-bold">ADOPTS</span> the
+                        subject known as <span class="font-bold">Abhishek Pandey</span>.
+                    </p>
+                    <p>
+                        This agreement is binding, irrevocable, and void of any 'take-backs', <span
+                            class="bg-gold/20 px-1 italic">regardless of low money or fast on monday</span>.
+                    </p>
+                </div>
+
+                <!-- Footer / Signatures -->
+                <div class="mt-12 grid grid-cols-2 gap-8 items-end pt-8 border-t border-charcoal/10">
+                    <!-- Left: Author -->
+                    <div class="text-center relative">
+                        <div class="font-handwriting text-2xl md:text-3xl text-charcoal transform -rotate-2 mb-2">
+                            Abhishek Pandey</div>
+                        <div class="w-full h-px bg-charcoal mb-2"></div>
+                        <p class="font-sans text-[8px] md:text-[10px] tracking-widest uppercase text-gray-400">
+                            Authorized Signature</p>
+                    </div>
+
+                    <!-- Right: User Interaction -->
+                    <div class="text-center relative min-h-[100px] flex flex-col justify-end">
+
+                        <!-- The Signature Animation Container -->
+                        <div id="minni-signature-container"
+                            class="absolute bottom-8 left-0 w-full flex justify-center pointer-events-none overflow-hidden z-10"
+                            style="width: 0; transition: width 2.5s ease-in-out;">
+                            <div class="font-handwriting text-3xl md:text-5xl text-blue-900 whitespace-nowrap pr-4">
+                                Minni</div>
+                        </div>
+
+                        <div id="button-container"
+                            class="relative w-full flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4 transition-all duration-300 mb-4 z-20">
+                            <button id="btn-sign" onclick="signContract()"
+                                class="bg-charcoal text-white font-serif px-4 py-2 md:px-6 shadow-lg hover:bg-gold transition-all text-xs md:text-sm uppercase tracking-wide w-full md:w-auto">
+                                Sign Here
+                            </button>
+                            <button id="btn-skip" onclick="rejectContract()"
+                                class="text-gray-400 text-[10px] md:text-xs font-sans hover:text-red-500 underline decoration-dotted transition-all">
+                                Skip
+                            </button>
+                        </div>
+
+                        <div class="w-full h-px bg-charcoal mb-2 relative z-0"></div>
+                        <p class="font-sans text-[8px] md:text-[10px] tracking-widest uppercase text-gray-400">Accepting
+                            Party</p>
+
+                        <div id="legal-message-area"
+                            class="absolute -top-12 left-0 w-full text-center text-xs text-red-400 italic font-serif opacity-0 transition-opacity">
+                        </div>
+                        <p id="no-option-msg"
+                            class="hidden absolute -top-16 w-full text-center text-charcoal font-serif italic text-xs animate-fade-in bg-white/90 p-1">
+                            You never had the option.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Watermark -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] z-0">
+                    <h1 class="font-serif text-6xl md:text-9xl text-charcoal -rotate-45">OFFICIAL</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stage 5: Final -->
+    <div id="stage-5" class="stage flex-col items-center justify-start min-h-screen w-full relative overflow-y-auto">
+        <div class="max-w-3xl w-full mx-auto p-6 md:p-10 pt-20 space-y-12 text-center animate-slide-up pb-24">
+
+            <header class="space-y-4">
+                <span
+                    class="inline-block px-3 py-1 border border-gold text-gold text-xs tracking-[0.2em] uppercase rounded-full mb-4">Celebration</span>
+                <h1 class="font-serif text-5xl md:text-7xl text-charcoal leading-tight">Happy<br><span
+                        class="text-gold italic">Birthday!</span></h1>
+            </header>
+
+            <!-- Main Image Frame (Polaroid Style) -->
+            <div
+                class="bg-white p-3 pb-12 shadow-2xl rotate-2 hover:rotate-0 transition-transform duration-700 ease-out max-w-sm mx-auto transform origin-top border border-gray-100">
+                <div class="aspect-[4/5] bg-gray-100 overflow-hidden relative">
+                    <!-- USING UNSPLASH SOURCE FOR RELIABILITY -->
+                    <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=600&auto=format&fit=crop"
+                        class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000"
+                        alt="College Memory">
+                </div>
+                <div class="mt-4 font-handwriting text-2xl text-charcoal rotate-1">Best times</div>
+            </div>
+
+            <div class="prose prose-lg mx-auto font-serif text-gray-600 leading-relaxed text-left max-w-xl px-4">
+                <p class="first-letter:text-5xl first-letter:float-left first-letter:mr-3 first-letter:text-gold">
+                    Okay, you actually made it. I put you through all that because clicking a link is too easy for
+                    someone like you.
+                </p>
+                <p>
+                    I hope this year brings you as much chaos and joy as you bring to everyone else. You've officially
+                    signed the contract, so you're stuck with me now. No refunds, no exchanges.
+                </p>
+                <p>
+                    Here's to another year of being iconic, slightly questionable life choices, and absolute dominance.
+                    🥂
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-6 max-w-xl mx-auto px-4">
+                <div class="bg-white p-2 shadow-lg -rotate-3 transform hover:scale-105 transition duration-500">
+                    <img src="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=400"
+                        class="w-full h-32 md:h-40 object-cover grayscale hover:grayscale-0 transition-all">
+                </div>
+                <div class="bg-white p-2 shadow-lg rotate-3 transform hover:scale-105 transition duration-500">
+                    <img src="https://images.unsplash.com/photo-1530103862676-de3c9a59af38?auto=format&fit=crop&q=80&w=400"
+                        class="w-full h-32 md:h-40 object-cover grayscale hover:grayscale-0 transition-all">
+                </div>
+            </div>
+
+            <button onclick="location.reload()"
+                class="text-xs text-gray-400 hover:text-gold transition-colors tracking-widest uppercase mt-12">Replay
+                Mission</button>
+
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const CONFIG = {
+            password: "123", // Simple check
+
+            questions: [
+                { q: "Abhi tak kitni baar giri hai?", a: ["Langdi bas ek baar hui", "Gandhee", "Lost Count", "Never"], c: 2 },
+                { q: "IQ kaisa hai tera?", a: ["Bahut high", "94% in 12th", "Adarsh se kam", "Einstein Level"], c: 2 },
+                { q: "Tera Course kya hai?", a: ["CSE Core", "Jaat Management", "Mai Dhokhebaaz hu", "Fashion Design"], c: 2 },
+                { q: "", a: ["CSE Core", "Jaat Management", "Mai Dhokhebaaz hu", "Fashion Design"], c: 2 },
+                { q: "Minal kya hai?", a: ["Jaat Buddhi", "Langdi", "Failed NCC", "Not sure but Abhishek is God"], c: 3 }
+            ],
+
+            // Sassy Messages for Wrong Answers
+            wrongAnswers: [
+                "Fake friend detected",
+                "Excuse me??",
+                "Try again, bro.",
+                "Embarrassing for you...",
+                "Are you guessing?",
+                "Big Oof."
+            ],
+
+            // 8 Images from 'Static' folder
+            memoryImages: [
+                './Static/GgiBlp6WYAAgXTa.jpeg',
+                './Static/GhbEqVfW0AAiguL.jpeg',
+                './Static/GkrEFltXEAAqHfH.jpg',
+                './Static/GktB9_oWQAAwx7H.jpg',
+                './Static/_MGA1732_12.webp',
+                './Static/camp-nou.webp',
+                './Static/wp11649541-pedri-2024-wallpapers.jpg',
+                './Static/wp13714997-pedri-2024-wallpapers.jpg'
+            ]
+        };
+
+        // --- STATE ---
+        let currentStage = 1;
+        let currentQuestion = 0;
+        let skipAttempts = 0;
+
+        // --- UTILS ---
+        function handleEnter(e) {
+            if (e.key === 'Enter') attemptLogin();
+        }
+
+        function showToast(message, type = 'error') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            const bgColor = type === 'success' ? 'bg-gold' : 'bg-charcoal';
+            const textColor = type === 'success' ? 'text-charcoal' : 'text-white';
+
+            toast.className = `${bgColor} ${textColor} px-6 py-3 rounded shadow-lg text-sm font-serif tracking-wide animate-fade-in mb-2 transform transition-all w-full text-center`;
+            toast.innerText = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-10px]');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function setProgressBar(percent) {
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+        }
+
+        // --- NAVIGATION ---
+        function nextStage() {
+            const current = document.getElementById(`stage-${currentStage}`);
+            current.classList.remove('active-stage');
+
+            setTimeout(() => {
+                current.style.display = 'none';
+
+                currentStage++;
+                const next = document.getElementById(`stage-${currentStage}`);
+
+                if (next) {
+                    next.style.display = 'flex';
+                    void next.offsetWidth; // Force Reflow
+                    next.classList.add('active-stage');
+
+                    // Specific Stage logic
+                    if (currentStage === 2) loadQuestion();
+                    if (currentStage === 3) initMemoryGame();
+                    if (currentStage === 5) startCelebration();
+                }
+
+                setProgressBar((currentStage - 1) * 25);
+            }, 500);
+        }
+        function attemptLogin() {
+            showToast("damnn .. Guessed it right", "success");
+            nextStage();
+        }
+        function loadQuestion() {
+            if (currentQuestion >= CONFIG.questions.length) {
+                const card = document.getElementById('quiz-card');
+                card.style.opacity = '0';
+                setTimeout(() => {
+                    card.innerHTML = `
+                        <div class="text-center py-8 animate-fade-in flex flex-col items-center justify-center h-full">
+                            <h3 class="text-xl md:text-2xl font-serif text-charcoal leading-relaxed mb-4">
+                                Tu ye sab hai
+                            </h3>
+                            <p class="text-2xl md:text-3xl font-serif text-gold italic">
+                                + a great student and an Artist
+                            </p>
+                        </div>
+                    `;
+                    card.style.opacity = '1';
+                    setTimeout(nextStage, 3000);
+                }, 500);
+                return;
+            }
+            const q = CONFIG.questions[currentQuestion];
+            document.getElementById('question-text').innerText = q.q;
+            document.getElementById('quiz-progress').innerText = `Question ${currentQuestion + 1} of ${CONFIG.questions.length}`;
+
+            const grid = document.getElementById('answers-grid');
+            grid.innerHTML = '';
+
+            q.a.forEach((ans, index) => {
+                const btn = document.createElement('button');
+                btn.className = "group w-full p-3 md:p-4 border border-gray-200 text-left hover:border-gold hover:bg-cream transition-all duration-300 rounded-sm relative overflow-hidden active:scale-95";
+                btn.innerHTML = `<span class="relative z-10 group-hover:text-charcoal transition-colors font-sans text-gray-600 text-sm md:text-base">${ans}</span>`;
+                btn.onclick = () => checkAnswer(index, q.c, btn);
+                grid.appendChild(btn);
+            });
+        }
+        function checkAnswer(selected, correct, btnElement) {
+            if (selected === correct) {
+                btnElement.className = "w-full p-3 md:p-4 border border-gold bg-gold text-white rounded-sm relative overflow-hidden shadow-md";
+                btnElement.querySelector('span').classList.remove('text-gray-600');
+                btnElement.querySelector('span').classList.add('text-white');
+
+                setTimeout(() => {
+                    currentQuestion++;
+                    loadQuestion();
+                }, 800);
+            } else {
+                const msgs = CONFIG.wrongAnswers;
+                const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
+
+                showToast(randomMsg, "error");
+                btnElement.classList.add('bg-red-50', 'border-red-200', 'animate-shake');
+                setTimeout(() => btnElement.classList.remove('animate-shake'), 500);
+            }
+        }
+        function initMemoryGame() {
+            const board = document.getElementById('game-board');
+            let cards = [...CONFIG.memoryImages, ...CONFIG.memoryImages];
+
+            // Fisher-Yates Shuffle
+            for (let i = cards.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [cards[i], cards[j]] = [cards[j], cards[i]];
+            }
+
+            let [hasFlippedCard, lockBoard] = [false, false];
+            let [firstCard, secondCard] = [null, null];
+            let matchesFound = 0;
+
+            board.innerHTML = '';
+
+            cards.forEach(imgUrl => {
+                const cardContainer = document.createElement('div');
+                cardContainer.className = "card-perspective h-24 md:h-32 w-full cursor-pointer tap-highlight-transparent";
+                // Accessibilty
+                cardContainer.setAttribute('role', 'button');
+                cardContainer.setAttribute('tabindex', '0');
+
+                cardContainer.innerHTML = `
+                    <div class="card-inner shadow-md rounded">
+                        <div class="card-front bg-charcoal rounded flex items-center justify-center">
+                            <span class="text-gold text-xl opacity-20">✦</span>
+                        </div>
+                        <div class="card-back bg-white rounded overflow-hidden">
+                            <img src="${imgUrl}" class="w-full h-full object-cover">
+                        </div>
+                    </div>
+                `;
+
+                cardContainer.onclick = function () {
+                    if (lockBoard || this === firstCard || this.classList.contains('matched')) return;
+                    this.classList.add('flipped');
+
+                    if (!hasFlippedCard) {
+                        hasFlippedCard = true;
+                        firstCard = this;
+                        return;
+                    }
+
+                    secondCard = this;
+                    checkForMatch();
+                };
+
+                board.appendChild(cardContainer);
+            });
+
+            function checkForMatch() {
+                const img1 = firstCard.querySelector('img').src;
+                const img2 = secondCard.querySelector('img').src;
+                let isMatch = img1 === img2;
+                isMatch ? disableCards() : unflipCards();
+            }
+
+            function disableCards() {
+                firstCard.classList.add('matched');
+                secondCard.classList.add('matched');
+                matchesFound++;
+                resetBoard();
+
+                if (matchesFound === CONFIG.memoryImages.length) {
+                    setTimeout(() => {
+                        document.getElementById('memory-victory').classList.remove('hidden');
+                        setTimeout(nextStage, 2000);
+                    }, 500);
+                }
+            }
+
+            function unflipCards() {
+                lockBoard = true;
+                setTimeout(() => {
+                    firstCard.classList.remove('flipped');
+                    secondCard.classList.remove('flipped');
+                    resetBoard();
+                }, 1000);
+            }
+
+            function resetBoard() {
+                [hasFlippedCard, lockBoard] = [false, false];
+                [firstCard, secondCard] = [null, null];
+            }
+        }
+
+        // --- STAGE 4: LEGAL ---
+        const sentyMessages = ["are you sure ", "think again", "Sorry but .. it's not Optional"];
+
+        function rejectContract() {
+            skipAttempts++;
+            const btnSkip = document.getElementById('btn-skip');
+            const btnSign = document.getElementById('btn-sign');
+            const msgArea = document.getElementById('legal-message-area');
+
+            if (skipAttempts <= 3) {
+                msgArea.innerText = sentyMessages[skipAttempts - 1] || "Really?";
+                msgArea.classList.remove('opacity-0');
+                msgArea.classList.add('animate-shake');
+                setTimeout(() => msgArea.classList.remove('animate-shake'), 500);
+            }
+
+            // Manipulate buttons
+            const currentScaleBy = 1 + (skipAttempts * 0.1);
+            btnSign.style.transform = `scale(${currentScaleBy})`;
+
+            const currentShrink = 1 - (skipAttempts * 0.2);
+            if (currentShrink > 0) {
+                btnSkip.style.transform = `scale(${currentShrink})`;
+                btnSkip.style.opacity = currentShrink;
+            } else {
+                btnSkip.style.display = 'none';
+                msgArea.style.opacity = '0';
+                const noOption = document.getElementById('no-option-msg');
+                noOption.innerText = "Never had the option";
+                noOption.classList.remove('hidden');
+            }
+        }
+
+        function signContract() {
+            const buttonContainer = document.getElementById('button-container');
+            const signatureContainer = document.getElementById('minni-signature-container');
+
+            // Clean up UI
+            buttonContainer.style.opacity = '0';
+            buttonContainer.style.pointerEvents = 'none';
+            document.getElementById('no-option-msg').classList.add('hidden');
+            document.getElementById('legal-message-area').style.opacity = '0';
+
+            setTimeout(() => {
+                signatureContainer.style.width = '100%'; // Animation trigger
+                setTimeout(nextStage, 3000);
+            }, 300);
+        }
+
+        // --- STAGE 5: GLORY ---
+        function startCelebration() {
+            setProgressBar(100);
+
+            const duration = 3000;
+            const end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 5,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 },
+                    colors: ['#D4AF37', '#E6BEAE', '#F9F7F2']
+                });
+                confetti({
+                    particleCount: 5,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 },
+                    colors: ['#D4AF37', '#E6BEAE', '#F9F7F2']
+                });
+
+                if (Date.now() < end) requestAnimationFrame(frame);
+            }());
+
+            setInterval(() => {
+                confetti({
+                    particleCount: 2,
+                    angle: 90,
+                    spread: 90,
+                    origin: { y: -0.1 },
+                    gravity: 0.8,
+                    colors: ['#D4AF37', '#E6BEAE', '#F9F7F2'],
+                    ticks: 300
+                });
+            }, 2500);
+        }
+    </script>
+</body>
+
+</html>
