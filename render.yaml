@@ -1,5 +1,5 @@
 services:
   - type: static
-    name: haan-static-site
+    name: Minal-legal-driver
     env: static
     staticPublishPath: .
